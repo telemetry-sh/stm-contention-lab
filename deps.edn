@@ -1,0 +1,7 @@
+{:paths ["src"]
+ :deps {org.clojure/clojure {:mvn/version "1.12.5"}}
+ :aliases
+ {:run {:main-opts ["-m" "stm-lab.server"]}
+  :json {:main-opts ["-m" "stm-lab.cli" "--json"]}
+  :test {:extra-paths ["test"]
+         :main-opts ["-m" "stm-lab.model-test"]}}}

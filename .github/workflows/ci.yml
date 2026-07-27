@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install Clojure CLI
+        shell: bash
+        run: |
+          curl --fail --location --silent --show-error \
+            https://github.com/clojure/brew-install/releases/download/1.12.5.1654/linux-install.sh \
+            --output /tmp/install-clojure
+          echo "28f81b0833c0a072f4370ae0eb1e4c5a4f9f4a34035cd7607ea9f253a8b06da1  /tmp/install-clojure" \
+            | sha256sum -c -
+          chmod +x /tmp/install-clojure
+          sudo /tmp/install-clojure
+      - run: make check
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: make docker-check

@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="An interactive Clojure simulator for STM conflicts, automatic transaction retries, speculative work, commute, sharded Refs, and batched flushes."
+    >
+    <title>STM Contention Lab · telemetry.sh</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="https://telemetry.sh">
+        <span class="brand-mark">(t)</span>
+        <span>telemetry.sh</span>
+      </a>
+      <span class="header-mode">Clojure 1.12 / MVCC STM</span>
+      <a class="source-link" href="https://github.com/telemetry-sh/stm-contention-lab">
+        source ↗
+      </a>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">SPECULATIVE WORK / COMMITTED STATE</p>
+          <h1>
+            THE COUNTER<br>
+            MOVED ONCE.<br>
+            <em>THE FUNCTION RAN FIVE TIMES.</em>
+          </h1>
+          <p class="lede">
+            Clojure STM automatically retries conflicting transactions. Your
+            final Ref is correct. Your CPU bill, latency, and side effects may
+            tell a very different story.
+          </p>
+          <a class="hero-action" href="#experiment">contend on one Ref <span>↓</span></a>
+        </div>
+
+        <div class="repl-card">
+          <div class="repl-head">
+            <span>checkout.counter / transaction tx-0730</span>
+            <span class="live"><i></i> live</span>
+          </div>
+          <pre><code><span class="syntax">(</span>dosync
+  <span class="danger">(emit-receipt! order)</span>
+  <span class="syntax">(</span>alter orders-processed inc<span class="syntax">))</span></code></pre>
+          <div class="attempt-stack" id="hero-attempts">
+            <div><span>attempt 1</span><b>retry</b></div>
+            <div><span>attempt 2</span><b>retry</b></div>
+            <div><span>attempt 3</span><b>retry</b></div>
+            <div><span>attempt 4</span><b>commit</b></div>
+          </div>
+          <div class="repl-summary">
+            <div><span>commits</span><strong id="hero-commits">—</strong></div>
+            <div><span>automatic retries</span><strong id="hero-retries">—</strong></div>
+            <div><span>extra effects</span><strong id="hero-effects">—</strong></div>
+          </div>
+          <div class="repl-warning">
+            <span>!</span>
+            <p><strong>the Ref is correct.</strong> the receipt emitter was not transactional.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="equation">
+        <span>TRANSACTION METRIC</span>
+        <strong>1,920 commits</strong>
+        <i>+</i>
+        <strong>3,757 invisible retries</strong>
+        <i>=</i>
+        <strong>5,677 executions</strong>
+      </section>
+
+      <section id="experiment" class="experiment">
+        <div class="section-heading">
+          <div>
+            <p class="section-label">01 / WORKLOAD</p>
+            <h2>Turn up write-point pressure.</h2>
+          </div>
+          <p>
+            Every policy receives the same logical operations. Change
+            concurrency, transaction duration, hot-Ref count, and the cost of an
+            accidental side effect.
+          </p>
+        </div>
+
+        <form id="controls" class="controls">
+          <label>
+            <span>workers <output data-for="workers"></output></span>
+            <input name="workers" type="range" min="2" max="64" step="1" value="16">
+          </label>
+          <label>
+            <span>ops / worker <output data-for="operations_per_worker"></output></span>
+            <input name="operations_per_worker" type="range" min="20" max="1000" step="20" value="120">
+          </label>
+          <label>
+            <span>hot Refs <output data-for="hot_refs"></output></span>
+            <input name="hot_refs" type="range" min="1" max="64" step="1" value="1">
+          </label>
+          <label>
+            <span>transaction work <output data-for="critical_work_us"></output></span>
+            <input name="critical_work_us" type="range" min="20" max="2000" step="20" value="180">
+          </label>
+          <label>
+            <span>effect-bearing ops <output data-for="side_effect_percent"></output></span>
+            <input name="side_effect_percent" type="range" min="0" max="100" step="1" value="25">
+          </label>
+          <label>
+            <span>shards <output data-for="shards"></output></span>
+            <input name="shards" type="range" min="2" max="128" step="2" value="16">
+          </label>
+          <label>
+            <span>batch size <output data-for="batch_size"></output></span>
+            <input name="batch_size" type="range" min="2" max="100" step="1" value="20">
+          </label>
+          <label>
+            <span>observation <output data-for="observation_seconds"></output></span>
+            <input name="observation_seconds" type="range" min="5" max="30" step="1" value="12">
+          </label>
+          <label>
+            <span>seed <output data-for="seed"></output></span>
+            <input name="seed" type="range" min="1" max="99999" step="1" value="41873">
+          </label>
+          <button type="reset">reset transaction world ↺</button>
+        </form>
+
+        <div class="section-heading policy-heading">
+          <div>
+            <p class="section-label">02 / WRITE STRATEGY</p>
+            <h2>Change the speculative surface.</h2>
+          </div>
+          <span id="request-state">running model…</span>
+        </div>
+        <div id="strategy-grid" class="strategy-grid"></div>
+
+        <div class="signal-layout">
+          <section class="retry-chart-panel">
+            <div class="panel-head">
+              <div>
+                <p class="section-label">03 / ATTEMPT RATE</p>
+                <h3 id="chart-title">—</h3>
+              </div>
+              <div class="legend">
+                <span class="commit">committed transactions</span>
+                <span class="retry">automatic retries</span>
+              </div>
+            </div>
+            <div class="canvas-wrap"><canvas id="retry-chart"></canvas></div>
+          </section>
+
+          <aside class="metric-stack">
+            <p class="section-label">SELECTED POLICY</p>
+            <div><span>commit efficiency</span><strong id="selected-efficiency">—</strong></div>
+            <div><span>wasted speculative work</span><strong id="selected-waste">—</strong></div>
+            <div><span>transaction p99</span><strong id="selected-p99">—</strong></div>
+            <div><span>logical throughput</span><strong id="selected-throughput">—</strong></div>
+            <div class="side-effect-metric">
+              <span>duplicate side effects</span><strong id="selected-effects">—</strong>
+            </div>
+            <p id="selected-semantics">—</p>
+          </aside>
+        </div>
+      </section>
+
+      <section class="comparison">
+        <div class="comparison-copy">
+          <p class="section-label">04 / ATTEMPT–COMMIT GAP</p>
+          <h2>Correct state can hide<br>incorrect work.</h2>
+          <p>
+            A counter exported after commit sees the successful write. It does
+            not see the discarded functions that consumed CPU—or repeated an
+            effect the STM could not roll back.
+          </p>
+        </div>
+        <div id="comparison-list" class="comparison-list"></div>
+      </section>
+
+      <section class="trace-ledger">
+        <div class="section-heading">
+          <div>
+            <p class="section-label">05 / TRANSACTION LEDGER</p>
+            <h2>Trace every attempt, not only the winner.</h2>
+          </div>
+          <p>selected: <strong id="trace-policy">—</strong></p>
+        </div>
+        <div class="ledger-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>transaction</th>
+                <th>worker</th>
+                <th>logical op</th>
+                <th>attempt</th>
+                <th>Ref</th>
+                <th>duration</th>
+                <th>outcome</th>
+                <th>side effect</th>
+                <th>commit</th>
+              </tr>
+            </thead>
+            <tbody id="trace-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="telemetry">
+        <div class="telemetry-copy">
+          <p class="section-label">06 / TELEMETRY RECIPE</p>
+          <h2>Give speculative work<br>an identity.</h2>
+          <p>
+            Keep one logical transaction ID across attempts. Emit an event for
+            every attempt, and a separate commit event. Side effects belong
+            after commit—or behind an idempotent boundary.
+          </p>
+          <a href="https://telemetry.sh">inspect with telemetry.sh ↗</a>
+        </div>
+        <div class="signals">
+          <article><code>stm.transaction.id</code><p>Joins every speculative attempt to one logical operation.</p></article>
+          <article><code>stm.transaction.attempt</code><p>Monotonic attempt number; the missing denominator in commit-only metrics.</p></article>
+          <article><code>stm.transaction.outcome</code><p>Commit, conflict retry, validation failure, or explicit abort.</p></article>
+          <article><code>stm.transaction.retry_count</code><p>Conflict amplification by policy, Ref set, and workload cohort.</p></article>
+          <article><code>stm.ref.key_hash</code><p>Privacy-safe hot-Ref attribution without recording domain values.</p></article>
+          <article><code>stm.speculative.cpu_ms</code><p>CPU consumed by both committed and discarded transaction bodies.</p></article>
+          <article><code>stm.effect.phase</code><p>Distinguishes unsafe inside-dosync effects from post-commit work.</p></article>
+          <article><code>stm.commit.efficiency</code><p>Committed transactions divided by total executions.</p></article>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span>STM CONTENTION LAB</span>
+      <span>Clojure 1.12.5 · analytical simulator</span>
+      <a href="https://telemetry.sh">telemetry.sh ↗</a>
+    </footer>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

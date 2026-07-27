@@ -1,0 +1,6 @@
+/.cpcache/
+/target/
+*.log
+.DS_Store
+.idea/
+.clj-kondo/.cache/
