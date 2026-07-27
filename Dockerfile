@@ -1,7 +1,7 @@
 FROM clojure:temurin-21-tools-deps-1.12.5.1654-alpine
 
 RUN addgroup -S -g 10001 lab \
-    && adduser -S -D -H -u 10001 -G lab lab
+    && adduser -S -D -H -h /app -u 10001 -G lab lab
 
 WORKDIR /app
 ENV HOME=/app
